@@ -17,15 +17,24 @@ Methodological Trade-Off: Static models (GMM) are more reactive to sudden market
 
 
 **🛠️ Repository Structure**
-Plaintext
+
 ├── data/
+
 │   └── all CSV files
+
 ├── figures/
+
 │   └── pictures here
+
 ├── notebooks/
+
 │   ├── all the notebooks
+
 ├── paper/
-│   └── Unsupervised_Market_Regimes.pdf                 
+
+│   └── Unsupervised_Market_Regimes.pdf     
+
 └── README.md
+
 
 **All of the main information about the research is in the paper**
