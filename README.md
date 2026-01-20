@@ -18,23 +18,12 @@ Methodological Trade-Off: Static models (GMM) are more reactive to sudden market
 
 **🛠️ Repository Structure**
 
-├── data/
+Data directory: contains all of the CSV files
 
-│   └── all CSV files
+Figures directory: contains all of the necessary figures and visualisations (separated into directories as well)
 
-├── figures/
+Notebooks directory: contains all of the research code separated into phases
 
-│   └── pictures here
-
-├── notebooks/
-
-│   ├── all the notebooks
-
-├── paper/
-
-│   └── Unsupervised_Market_Regimes.pdf     
-
-└── README.md
-
+Paper directory: Has a paper inside 
 
 **All of the main information about the research is in the paper**
