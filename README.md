@@ -1,5 +1,7 @@
 **Unsupervised Discovery of Market Regimes**
 
+**PAPER** https://docs.google.com/document/d/1km77DliO0iUhR27PnQhj4Wr7PHCjOJrApaH4D3TrPp4/edit?usp=sharing
+
 This repository contains the research and implementation of unsupervised machine learning models to identify latent market regimes (Calm, Transitional, and Stressful) using historical financial data from 1995 to 2024.
 
 The project compares Static Clustering (Gaussian Mixture Models) with Temporal Modeling (Hidden Markov Models) to evaluate which approach provides more stable and interpretable signals for financial risk management.
