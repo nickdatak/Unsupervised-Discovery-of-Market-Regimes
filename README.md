@@ -16,10 +16,8 @@ The analysis is organized as a numbered notebook pipeline (`01` → `05`), with 
 | 2 | [`02_standardize.ipynb`](notebooks/02_standardize.ipynb) | Load committed full-sample z-scores; compute **rolling** (52-week) and **expanding** causal standardizations |
 | 3 | [`03_models.ipynb`](notebooks/03_models.ipynb) | Fit 3-component GMM (`k-means++`) and HMM on each std variant; **reproduction gate** (ARI ≥ 0.99 vs committed CSVs); write regime labels |
 | 4 | [`04_decode_durations.ipynb`](notebooks/04_decode_durations.ipynb) | Compare decode methods (GMM pointwise, HMM Viterbi/smoothed/filtered) across std variants; durations, transition entropy, cross-model ARI |
-| 5 | [`05_external_validation.ipynb`](notebooks/05_external_validation.ipynb) | **NBER recession overlap** and **VIX > 20** baseline on look-ahead labels (Section A) and **causal filtered** HMM decode (Section B) |
+| 5 | [`05_external_validation.ipynb`](notebooks/05_external_validation.ipynb) | **NBER recession overlap** and **VIX > 20** baseline on look-ahead labels (Section A), decode-corrected filtered HMM (Section B), and **fully causal** rolling/expanding std + filtered (Section C) |
 | 6 | [`06_robustness.ipynb`](notebooks/06_robustness.ipynb) | Placeholder for walk-forward refit (not implemented) |
-
-Legacy exploratory and comparison notebooks live under [`notebooks/exploration/`](notebooks/exploration/), [`notebooks/models/`](notebooks/models/), and [`notebooks/evaluation & comparison /`](notebooks/evaluation%20&%20comparison%20/).
 
 ### Core methodological choices
 
@@ -53,9 +51,9 @@ Full-sample standardized features (committed):
 
 | Feature | Mean | Std | Min | Max |
 |---------|------|-----|-----|-----|
-| SP500_Return | 0.00 | 1.00 | −5.66 | 5.41 |
-| VIX | 0.00 | 1.00 | −1.41 | 4.66 |
-| Yield_Spread | 0.00 | 1.00 | −2.14 | 2.58 |
+| SP500_Return | 0.00 | 1.00 | −8.37 | 4.66 |
+| VIX | 0.00 | 1.00 | −1.29 | 7.29 |
+| Yield_Spread | 0.00 | 1.00 | −2.24 | 2.07 |
 
 ---
 
@@ -245,7 +243,39 @@ Causal filtering changes labels on only ~5% of weeks; Stressful assignments are 
 | Stress recall vs VIX>20 | 31.8% | 54.9% | **59.8%** |
 | Stress precision vs VIX>20 | 95.1% | 83.7% | **84.2%** |
 
-**Central external-validation finding:** switching to causal filtered decode does **not** break alignment with NBER recessions or the VIX>20 rule. Overlap is preserved or slightly **improved** versus Viterbi, while persistence is honestly reduced (see duration table above). The deployable HMM labels remain economically meaningful.
+**Central external-validation finding (Section B):** switching to causal filtered decode does **not** break alignment with NBER recessions or the VIX>20 rule. Overlap is preserved or slightly **improved** versus Viterbi, while persistence is honestly reduced (see duration table above).
+
+### External validation — Section C: fully causal variants (Notebook 05)
+
+Section B fixes decode look-ahead but still fits on full-sample z-scores. Section C refits on **rolling** and **expanding** causal standardizations with HMM **forward-filtered** decode — every step is deployable (1,513 weeks).
+
+**NBER overlap — HMM filtered across std variants:**
+
+| | Full-sample (B) | Rolling | Expanding |
+|--|-----------------|---------|-----------|
+| Recession weeks (% Stressful) | **61.9%** | **61.2%** | **63.4%** |
+| Non-recession weeks (% Stressful) | 24.3% | 29.2% | 33.4% |
+
+Non-recession Stressful rates creep up as expected when both features and decode are causal; recession overlap stays strong (61–63%).
+
+**Per-recession Stressful share — HMM filtered:**
+
+| Episode | Full-sample | Rolling | Expanding |
+|---------|-------------|---------|-----------|
+| Dot-com | 60.0% | 52.5% | 47.5% |
+| GFC | 61.0% | 59.8% | 69.5% |
+| COVID | 75.0% | 100.0% | 75.0% |
+
+**VIX > 20 baseline — HMM filtered:**
+
+| Metric | Full-sample | Rolling | Expanding |
+|--------|-------------|---------|-----------|
+| Agreement with VIX>20 | 80.1% | 69.5% | 79.6% |
+| Cohen's κ | 0.556 | 0.342 | 0.569 |
+| Stress recall vs VIX>20 | 59.8% | 51.8% | 69.6% |
+| Stress precision vs VIX>20 | 84.2% | 64.9% | 77.3% |
+
+**Fully causal external-validation finding:** every causal variant validates. Recession Stressful rates stay in the 61–63% band; non-recession rates creep to 29–33% on rolling/expanding std (vs 24% on decode-corrected full-sample); Cohen's κ remains 0.34–0.57. External alignment is not an artifact of look-ahead in decode or features.
 
 ---
 
@@ -257,7 +287,7 @@ Causal filtering changes labels on only ~5% of weeks; Stressful assignments are 
 
 3. **GMM is reactive; HMM is smoother.** GMM flips regimes frequently with high transition entropy. HMM Viterbi produces sticky paths and assigns more Stressful weeks overall.
 
-4. **External validity holds under causal decode.** NBER recession overlap and VIX>20 alignment survive—and marginally improve—with forward-filtered HMM labels, supporting the paper's causal correction.
+4. **External validity holds for every causal variant.** Decode-corrected filtered HMM labels (Section B) preserve NBER and VIX>20 alignment; fully causal rolling/expanding std + filtered (Section C) still show 61–63% recession Stressful rates and κ = 0.34–0.57, with non-recession Stressful rates rising only modestly (29–33%).
 
 5. **Standardization matters for magnitudes.** Rolling and expanding z-scores shorten regime durations further and are the right variants for strictly causal feature construction; full-sample std remains the committed baseline for reproduction.
 
@@ -278,7 +308,6 @@ Causal filtering changes labels on only ~5% of weeks; Stressful assignments are 
 | Path | Contents |
 |------|----------|
 | [`data/`](data/) | Weekly features, standardized features (3 variants), regime label CSVs |
-| [`figures/`](figures/) | Exploration, model, and comparison plots |
 | [`regime_utils.py`](regime_utils.py) | Paths, fits, decode methods, validation helpers |
 | [`notebooks/01_features.ipynb`](notebooks/01_features.ipynb) | Weekly resample + feature merge |
 | [`notebooks/02_standardize.ipynb`](notebooks/02_standardize.ipynb) | Full-sample, rolling, expanding standardization |
