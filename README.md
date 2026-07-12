@@ -152,6 +152,16 @@ Models agree on roughly **36%** of weeks overall (up from 28.6% under the single
 | Rolling | 6.2 | 18.9 | 17.2 | 13.5 |
 | Expanding | 7.3 | 50.4 | 50.4 | 37.8 |
 
+**95% bootstrap CIs** (spell resampling, 10,000 draws — see [`notebooks/04_decode_durations.ipynb`](notebooks/04_decode_durations.ipynb); a block bootstrap on the raw label sequence would artificially fragment runs and bias durations downward, so spells are resampled instead of weeks):
+
+| Std variant | GMM pointwise | HMM Viterbi (n spells) | HMM filtered (n spells) |
+|-------------|---------------|-------------------------|---------------------------|
+| Full-sample | [6.6, 11.6] | [35.2, 80.4] (28) | [24.7, 60.2] (38) |
+| Rolling | [5.2, 7.2] | [14.9, 23.4] (80) | [11.2, 16.1] (112) |
+| Expanding | [5.5, 9.3] | [31.3, 73.8] (30) | [22.9, 56.8] (40) |
+
+Full-sample HMM Viterbi has only 28 spells over 1,564 weeks, so its CI is wide by construction — that width is the honest result of a small effective sample, not something to smooth over. The two full-sample headline ratios, as intervals rather than point estimates (dividing bootstrap draws elementwise; an independence approximation since GMM and HMM are fit to the same sample rather than resampled jointly): **HMM Viterbi / GMM = 6.2× [3.7×, 9.9×]**, **HMM filtered / GMM = 4.6× [2.6×, 7.6×]**. These intervals overlap substantially — "filtering cuts the persistence gap by about a quarter" is a real point-estimate effect, but it is not a sharp statistical distinction given how few independent full-sample HMM spells there are.
+
 Key takeaways:
 
 - GMM durations (~6–9 weeks) are **honest**—no temporal smoothing.
