@@ -16,7 +16,7 @@ The analysis is organized as a numbered notebook pipeline (`01` → `05`), with 
 | 2 | [`02_standardize.ipynb`](notebooks/02_standardize.ipynb) | Load committed full-sample z-scores; compute **rolling** (52-week) and **expanding** causal standardizations |
 | 3 | [`03_models.ipynb`](notebooks/03_models.ipynb) | Fit 3-component GMM (`k-means++`) and HMM on each std variant; **reproduction gate** (ARI ≥ 0.99 vs committed CSVs); write regime labels |
 | 4 | [`04_decode_durations.ipynb`](notebooks/04_decode_durations.ipynb) | Compare decode methods (GMM pointwise, HMM Viterbi/smoothed/filtered) across std variants; durations, transition entropy, cross-model ARI |
-| 5 | [`05_external_validation.ipynb`](notebooks/05_external_validation.ipynb) | **NBER recession overlap** and **VIX > 20** baseline on look-ahead labels (Section A), decode-corrected filtered HMM (Section B), and **fully causal** rolling/expanding std + filtered (Section C) |
+| 5 | [`05_external_validation.ipynb`](notebooks/05_external_validation.ipynb) | **NBER recession overlap** and **VIX > 20** baseline on look-ahead labels (Section A), decode-corrected filtered HMM (Section B), **fully causal** rolling/expanding std + filtered (Section C), and pipeline-generated regime profile + drawdown stats (Section D) |
 | 6 | [`06_robustness.ipynb`](notebooks/06_robustness.ipynb) | Placeholder for walk-forward refit (not implemented) |
 
 ### Core methodological choices
@@ -98,37 +98,32 @@ Committed label coverage: **1,564 / 1,564** non-null named labels.
 
 HMM (Viterbi) assigns roughly **twice** the Stressful share of GMM and a much larger Transitional share, reflecting smoother, more persistent paths.
 
-### Feature profiles by regime (committed labels)
+### Regime profile (committed labels, pipeline-generated)
 
-Mean raw features within each named regime:
+Mean raw features, composition share, and two drawdown statistics per regime, produced by `regime_profile()` in [`notebooks/05_external_validation.ipynb`](notebooks/05_external_validation.ipynb) (Section D). This replaces a previously hand-typed "max drawdown" table that turned out to be miscomputed (see note below) — the whole table is now a pipeline output, checked against the committed CSVs.
+
+- **Max DD (within spell):** worst peak-to-trough decline computed on log returns *inside* a single contiguous run of one label — resets at every label change (`max_drawdown_by_spell`).
+- **Mkt DD while in regime:** deepest the whole-market wealth curve is underwater versus its all-time-to-date peak, restricted to weeks carrying that label — does not reset at label changes, so it can be large for a Calm week that follows a crash (`conditional_drawdown`).
 
 **GMM**
 
-| Regime | SP500_Return | VIX | Yield_Spread |
-|--------|--------------|-----|--------------|
-| Calm | +0.004 | 14.8 | 1.13 |
-| Transitional | −0.001 | 23.8 | 0.29 |
-| Stressful | −0.001 | 31.8 | 2.09 |
+| Regime | VIX | Yield_Spread | Mean weekly return | Share | Max DD (within spell) | Mkt DD while in regime |
+|---|---|---|---|---|---|---|
+| Calm | 14.8 | 1.13 | +0.004 | 57.5% | −7.5% | −41.2% |
+| Transitional | 23.8 | 0.29 | −0.001 | 29.5% | −25.8% | −28.9% |
+| Stressful | 31.8 | 2.09 | −0.001 | 13.0% | −45.6% | −56.2% |
 
 **HMM (Viterbi)**
 
-| Regime | SP500_Return | VIX | Yield_Spread |
-|--------|--------------|-----|--------------|
-| Calm | +0.003 | 15.9 | 0.29 |
-| Transitional | +0.002 | 17.3 | 1.74 |
-| Stressful | −0.001 | 28.2 | 0.56 |
+| Regime | VIX | Yield_Spread | Mean weekly return | Share | Max DD (within spell) | Mkt DD while in regime |
+|---|---|---|---|---|---|---|
+| Calm | 15.9 | 0.29 | +0.003 | 30.0% | −10.1% | −25.2% |
+| Transitional | 17.3 | 1.74 | +0.002 | 44.6% | −15.6% | −43.7% |
+| Stressful | 28.2 | 0.56 | −0.001 | 25.4% | −45.6% | −56.2% |
 
-Both models isolate a high-VIX Stressful regime. GMM Stressful has the highest mean VIX (~32) and elevated yield spread; HMM spreads Calm/Transitional more evenly on VIX.
+Both models isolate a high-VIX Stressful regime with the deepest within-spell drawdown of any label for either model (−45.6%, since both models' Stressful spells span the GFC). GMM's Calm regime looks tame within any single spell (−7.5%) but the market was **41.2%** underwater during weeks GMM calls Calm — those are 2003 and post-2009 recovery weeks that are calm *going forward* while still below the pre-crash peak (notebook 05 confirms the GMM-Calm underwater minimum falls on 2003-04-25, the whole-sample minimum on 2009-03-06, i.e. the post-dot-com and post-GFC bottoms).
 
-**Max drawdown within regime** (cumulative return path inside each regime label):
-
-| Regime | GMM | HMM (Viterbi) |
-|--------|-----|---------------|
-| Calm | −9.2% | −10.4% |
-| Transitional | −78.5% | −25.7% |
-| Stressful | −56.4% | −77.3% |
-
-GMM Transitional captures severe drawdown episodes that HMM assigns to longer Stressful runs.
+**Note — corrected drawdown definition:** an earlier version of this table reported GMM Transitional at −78.5%, worse than GMM Stressful (−56.4%), and concluded *"GMM Transitional captures severe drawdown episodes that HMM assigns to longer Stressful runs."* That number was wrong: the original `max_drawdown` compounded returns across the label's matched rows using `.cumprod()` over simple (non-log) returns without first restricting to contiguous spells, so it built a synthetic path splicing together dozens of disjoint Transitional weeks as if they occurred back-to-back — a path that never existed on any real trading calendar. With drawdown computed correctly (contiguous spells only, and on log returns via `exp(cumsum)`), GMM Transitional's within-spell drawdown is −25.8%, not the worst of the three regimes, and the "GMM buries crashes in Transitional" reading does not survive the fix.
 
 ### Cross-model agreement (full-sample std, integer labels)
 

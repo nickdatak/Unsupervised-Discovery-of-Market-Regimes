@@ -151,22 +151,24 @@ def filtered_decode(hmm: GaussianHMM, X: np.ndarray) -> np.ndarray:
     return filtered_probs.argmax(axis=1)
 
 
+def regime_spells(labels) -> list[tuple[object, int, int]]:
+    """Contiguous spells as (label, start, end_exclusive)."""
+    values = np.asarray(labels)
+    spells, start = [], 0
+    for i in range(1, len(values) + 1):
+        if i == len(values) or values[i] != values[i - 1]:
+            spells.append((values[start], start, i))
+            start = i
+    return spells
+
+
 def regime_durations(labels) -> np.ndarray:
     values = np.asarray(labels)
     if values.size == 0:
         return np.array([], dtype=int)
-    durations = []
-    current = values[0]
-    length = 1
-    for label in values[1:]:
-        if label == current:
-            length += 1
-        else:
-            durations.append(length)
-            current = label
-            length = 1
-    durations.append(length)
-    return np.asarray(durations, dtype=int)
+    durations = np.asarray([e - s for _, s, e in regime_spells(values)], dtype=int)
+    assert durations.sum() == len(values)
+    return durations
 
 
 def run_length_mean(labels) -> float:
@@ -196,10 +198,27 @@ def cross_model_ari(a, b) -> float:
     return float(adjusted_rand_score(a, b))
 
 
-def max_drawdown(series: pd.Series) -> float:
-    cum = (1 + series).cumprod()
-    peak = cum.cummax()
-    return float(((cum - peak) / peak).min())
+def max_drawdown(log_returns: pd.Series) -> float:
+    """Max drawdown of one contiguous LOG-return path."""
+    wealth = np.exp(log_returns.cumsum())
+    peak = wealth.cummax()
+    return float(((wealth - peak) / peak).min())
+
+
+def max_drawdown_by_spell(df, label_col, return_col="SP500_Return") -> pd.Series:
+    """Worst peak-to-trough decline inside any single contiguous spell per regime."""
+    out = {}
+    for label, s, e in regime_spells(df[label_col].values):
+        dd = max_drawdown(df[return_col].iloc[s:e])
+        out[label] = min(out.get(label, 0.0), dd)
+    return pd.Series(out)
+
+
+def conditional_drawdown(df, label_col, return_col="SP500_Return") -> pd.Series:
+    """Deepest market underwater level during weeks carrying each label."""
+    wealth = np.exp(df[return_col].cumsum())
+    dd = (wealth - wealth.cummax()) / wealth.cummax()
+    return dd.groupby(df[label_col]).min()
 
 
 def apply_label_map(labels, mapping: dict) -> pd.Series:
