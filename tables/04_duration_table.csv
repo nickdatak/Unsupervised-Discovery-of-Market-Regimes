@@ -1,0 +1,4 @@
+Std variant,GMM pointwise,HMM Viterbi,HMM filtered,HMM smoothed
+expanding,7.3,50.4,37.8,50.4
+full,9.0,55.9,41.2,55.9
+rolling,6.2,18.9,13.5,17.2

@@ -319,6 +319,7 @@ Rolling std is unaffected by the HMM rebase (its best-likelihood seed was alread
 | Path | Contents |
 |------|----------|
 | [`data/`](data/) | Weekly features, standardized features (3 variants), regime label CSVs |
+| [`tables/`](tables/) | Every published table, committed on first run; `commit_table()` asserts later runs reproduce it |
 | [`regime_utils.py`](regime_utils.py) | Paths, fits, decode methods, validation helpers |
 | [`notebooks/01_features.ipynb`](notebooks/01_features.ipynb) | Weekly resample + feature merge |
 | [`notebooks/02_standardize.ipynb`](notebooks/02_standardize.ipynb) | Full-sample, rolling, expanding standardization |
@@ -345,6 +346,7 @@ Run notebooks **01 → 05** in order from the `notebooks/` directory. All I/O go
 - HMM must use the 10-seed restart in `fit_hmm` (seeds 42–51, highest log-likelihood kept) — a single-seed fit will not reproduce the committed labels.
 - Load `market_features_weekly_std.csv` for the full-sample baseline — do not recompute.
 - Notebook 03 checks **ARI ≥ 0.99** against committed `gmm_regimes.csv` and `hmm_regimes.csv` before overwriting them.
+- Every table notebooks 03–05 print also goes through `commit_table()` (writes to [`tables/`](tables/) on first run, asserts exact reproduction on every run after). This extends the reproduction gate — which only covered regime *labels* — to every number quoted in this README; a stale or hand-edited figure now fails loudly instead of silently drifting from the pipeline.
 
 ---
 

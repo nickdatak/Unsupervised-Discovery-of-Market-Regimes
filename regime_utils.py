@@ -14,6 +14,7 @@ from sklearn.mixture import GaussianMixture
 
 REPO_ROOT = Path(__file__).resolve().parent
 DATA_DIR = REPO_ROOT / "data"
+TABLES_DIR = REPO_ROOT / "tables"
 
 MODEL_FEATURES = ["SP500_Return", "VIX", "Yield_Spread"]
 RANDOM_STATE = 42
@@ -46,6 +47,27 @@ def read_csv(name: str, **kwargs) -> pd.DataFrame:
 def write_csv(df: pd.DataFrame, name: str, **kwargs) -> None:
     kwargs.setdefault("index", False)
     df.to_csv(data_path(name), **kwargs)
+
+
+def commit_table(df: pd.DataFrame, name: str, atol: float = 1e-6) -> None:
+    """Numbers gate for a published table: first run commits it under tables/,
+    every later run must reproduce it (within atol) or raise.
+
+    Extends the reproduction gate (which only covers committed regime labels)
+    to every number the README quotes, so a stale or hand-edited figure fails
+    loudly on the next run instead of silently drifting from the pipeline.
+    """
+    path = TABLES_DIR / f"{name}.csv"
+    path.parent.mkdir(exist_ok=True)
+    if path.exists():
+        ref = pd.read_csv(path, index_col=0)
+        np.testing.assert_allclose(
+            df.values.astype(float), ref.values.astype(float), atol=atol
+        )
+        print(f"{name}: matches committed")
+    else:
+        df.to_csv(path)
+        print(f"{name}: committed")
 
 
 def _load_dated_std(name: str) -> pd.DataFrame:
