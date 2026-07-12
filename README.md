@@ -156,13 +156,13 @@ Key takeaways:
 - **Forward-filtered decode cuts full-sample HMM duration roughly in half** (50.5 → 25.6 weeks) while remaining causal.
 - Causal standardization (rolling/expanding) further reduces HMM Viterbi durations (18.9 and 26.5 weeks).
 
-**Transition entropy** (bits; per-state Shannon entropy of empirical next-state distribution, full-sample std, integer labels):
+**Transition entropy** (bits; per-regime Shannon entropy of empirical next-state distribution, full-sample std, states named by mean VIX before computing entropy — integer state IDs are not comparable across models, since GMM's and HMM's index-to-regime mapping differ):
 
-| State | GMM | HMM Viterbi | HMM filtered |
-|-------|-----|-------------|--------------|
-| 0 | 0.618 | 0.237 | 0.412 |
-| 1 | 0.524 | 0.112 | 0.213 |
-| 2 | 0.643 | 0.121 | 0.184 |
+| Regime | GMM | HMM Viterbi | HMM filtered |
+|--------|-----|-------------|--------------|
+| Calm | 0.524 | 0.112 | 0.213 |
+| Transitional | 0.618 | 0.121 | 0.184 |
+| Stressful | 0.643 | 0.237 | 0.412 |
 | **Average** | **0.595** | **0.157** | **0.270** |
 
 HMM Viterbi paths are the most **sticky** (lowest entropy). Filtered decode increases transition entropy toward GMM-like reactivity while preserving temporal structure.
