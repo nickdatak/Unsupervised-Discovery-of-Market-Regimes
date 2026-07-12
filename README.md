@@ -24,8 +24,9 @@ The analysis is organized as a numbered notebook pipeline (`01` → `05`), with 
 - **Three features:** `SP500_Return` (weekly log return), `VIX`, `Yield_Spread` (10Y–2Y).
 - **Three regimes:** integer cluster/state IDs are mapped to names **per fit** by ascending mean VIX within each label (lowest → Calm, middle → Transitional, highest → Stressful). Integer IDs permute across standardization variants; names are comparable.
 - **GMM:** `GaussianMixture(n_components=3, covariance_type="full", init_params="k-means++", n_init=10, random_state=42)`. Labels each week independently via `predict`—no temporal decode step.
-- **HMM:** `GaussianHMM(n_components=3, covariance_type="full", n_iter=1000, random_state=42)`. Temporal structure enters through the transition matrix and decode method.
-- **Committed regime CSVs** (`gmm_regimes.csv`, `hmm_regimes.csv`): fit on **full-sample** standardized features; HMM labels use **global Viterbi** decode (`hmm.predict`). These are the look-ahead baseline used in Section A of external validation.
+- **HMM:** `GaussianHMM(n_components=3, covariance_type="full", n_iter=1000)`, fit with a **10-seed restart** (`random_state` 42–51) and the highest-likelihood fit kept (`fit_hmm`). Temporal structure enters through the transition matrix and decode method.
+  - *Why a restart:* a single EM run at `random_state=42` is one local optimum among several with materially different log-likelihoods. A seed-stability diagnostic in [`notebooks/03_models.ipynb`](notebooks/03_models.ipynb) sweeps seeds 42–61 on the full-sample std: seed 42 alone sits 86 nats below the best fit found (seed 48), and that better fit has ARI 0.55 against the single-seed labels — a different clustering, not a relabeling. `fit_hmm` now restarts across a fixed 10-seed tuple and keeps the best log-likelihood, so the fit is still deterministic (same seeds every run ⇒ same winner) but is a genuine best-of-10 optimum rather than whatever `random_state=42` happened to land on. This changed the committed HMM labels and every table derived from them; GMM is unaffected (`n_init=10` k-means++ already restarts internally).
+- **Committed regime CSVs** (`gmm_regimes.csv`, `hmm_regimes.csv`): fit on **full-sample** standardized features; HMM labels use **global Viterbi** decode (`hmm.predict`) on the restarted fit above. These are the look-ahead baseline used in Section A of external validation.
 
 ---
 
@@ -73,7 +74,7 @@ The paper's central causal correction is switching from Viterbi to **forward-fil
 
 ## Results
 
-All numbers below are reproduced by running notebooks `03`–`05` with `random_state=42` and the committed data files.
+All numbers below are reproduced by running notebooks `03`–`05` with the committed data files. GMM uses `random_state=42`; HMM uses the 10-seed restart (42–51) described above.
 
 ### Model fitting and reproduction (Notebook 03)
 
@@ -92,11 +93,11 @@ Committed label coverage: **1,564 / 1,564** non-null named labels.
 
 | Regime | GMM share | HMM (Viterbi) share |
 |--------|-----------|---------------------|
-| Calm | 57.5% | 30.0% |
-| Transitional | 29.5% | 44.6% |
-| Stressful | 13.0% | 25.4% |
+| Calm | 57.5% | 29.7% |
+| Transitional | 29.5% | 37.1% |
+| Stressful | 13.0% | 33.2% |
 
-HMM (Viterbi) assigns roughly **twice** the Stressful share of GMM and a much larger Transitional share, reflecting smoother, more persistent paths.
+HMM (Viterbi) assigns roughly **2.5×** the Stressful share of GMM, reflecting smoother, more persistent paths.
 
 ### Regime profile (committed labels, pipeline-generated)
 
@@ -117,27 +118,27 @@ Mean raw features, composition share, and two drawdown statistics per regime, pr
 
 | Regime | VIX | Yield_Spread | Mean weekly return | Share | Max DD (within spell) | Mkt DD while in regime |
 |---|---|---|---|---|---|---|
-| Calm | 15.9 | 0.29 | +0.003 | 30.0% | −10.1% | −25.2% |
-| Transitional | 17.3 | 1.74 | +0.002 | 44.6% | −15.6% | −43.7% |
-| Stressful | 28.2 | 0.56 | −0.001 | 25.4% | −45.6% | −56.2% |
+| Calm | 13.3 | 0.48 | +0.003 | 29.7% | −6.8% | −25.2% |
+| Transitional | 18.8 | 1.93 | +0.002 | 37.1% | −15.6% | −45.7% |
+| Stressful | 26.3 | 0.44 | −0.001 | 33.2% | −45.6% | −56.2% |
 
 Both models isolate a high-VIX Stressful regime with the deepest within-spell drawdown of any label for either model (−45.6%, since both models' Stressful spells span the GFC). GMM's Calm regime looks tame within any single spell (−7.5%) but the market was **41.2%** underwater during weeks GMM calls Calm — those are 2003 and post-2009 recovery weeks that are calm *going forward* while still below the pre-crash peak (notebook 05 confirms the GMM-Calm underwater minimum falls on 2003-04-25, the whole-sample minimum on 2009-03-06, i.e. the post-dot-com and post-GFC bottoms).
 
 **Note — corrected drawdown definition:** an earlier version of this table reported GMM Transitional at −78.5%, worse than GMM Stressful (−56.4%), and concluded *"GMM Transitional captures severe drawdown episodes that HMM assigns to longer Stressful runs."* That number was wrong: the original `max_drawdown` compounded returns across the label's matched rows using `.cumprod()` over simple (non-log) returns without first restricting to contiguous spells, so it built a synthetic path splicing together dozens of disjoint Transitional weeks as if they occurred back-to-back — a path that never existed on any real trading calendar. With drawdown computed correctly (contiguous spells only, and on log returns via `exp(cumsum)`), GMM Transitional's within-spell drawdown is −25.8%, not the worst of the three regimes, and the "GMM buries crashes in Transitional" reading does not survive the fix.
 
-### Cross-model agreement (full-sample std, integer labels)
+### Cross-model agreement (full-sample std)
 
 | Metric | GMM vs HMM Viterbi | GMM vs HMM filtered |
 |--------|--------------------|---------------------|
-| Adjusted Rand Index | 0.254 | 0.274 |
-| Raw label agreement | 28.6% | — |
+| Adjusted Rand Index (integer labels) | 0.348 | 0.332 |
+| Raw label agreement (named) | 35.7% | — |
 
-| Subsample | ARI (GMM vs HMM Viterbi) |
+| Subsample | ARI (GMM vs HMM Viterbi, integer labels) |
 |-----------|--------------------------|
-| Pre-2005 | 0.270 |
-| Post-2005 | 0.240 |
+| Pre-2005 | 0.551 |
+| Post-2005 | 0.260 |
 
-Models agree on roughly **29%** of weeks overall and mainly converge during stress episodes, not on Calm vs Transitional boundaries.
+Models agree on roughly **36%** of weeks overall (up from 28.6% under the single-seed HMM fit). The 3×3 co-classification (named labels; see [`notebooks/04_decode_durations.ipynb`](notebooks/04_decode_durations.ipynb)) shows why: of GMM's 900 Calm weeks, 441 (49%) are also HMM Calm; of GMM's 203 Stressful weeks, 83 (41%) are also HMM Stressful. The larger pattern is a one-way absorption, not mutual agreement — 403 of GMM's 461 Transitional weeks (87%) are labeled HMM Stressful, consistent with HMM's wider Stressful share (33.2% vs GMM's 13.0%). Pre-2005 agreement (ARI 0.55) is much stronger than post-2005 (ARI 0.26); the two models diverge more in the second half of the sample.
 
 ### Persistence and transition dynamics (Notebook 04)
 
@@ -145,25 +146,25 @@ Models agree on roughly **29%** of weeks overall and mainly converge during stre
 
 | Std variant | GMM pointwise | HMM Viterbi | HMM smoothed | HMM filtered |
 |-------------|---------------|-------------|--------------|--------------|
-| Full-sample | 9.0 | **50.5** | 44.7 | **25.6** |
+| Full-sample | 9.0 | **55.9** | 55.9 | **41.2** |
 | Rolling | 6.2 | 18.9 | 17.2 | 13.5 |
-| Expanding | 7.3 | 26.5 | 25.6 | 16.4 |
+| Expanding | 7.3 | 50.4 | 50.4 | 37.8 |
 
 Key takeaways:
 
 - GMM durations (~6–9 weeks) are **honest**—no temporal smoothing.
-- HMM Viterbi on full-sample std (~50 weeks) is **inflated by global look-ahead**; this was the headline persistence gap in early analysis.
-- **Forward-filtered decode cuts full-sample HMM duration roughly in half** (50.5 → 25.6 weeks) while remaining causal.
-- Causal standardization (rolling/expanding) further reduces HMM Viterbi durations (18.9 and 26.5 weeks).
+- HMM Viterbi on full-sample std (~56 weeks) is **inflated by global look-ahead**. This is *worse* than the ~50-week figure from the original single-seed fit: the multi-restart best-likelihood optimum (Fix 3) turned out to be a stickier model, not a less sticky one.
+- **Forward-filtered decode reduces full-sample HMM duration by about a quarter** (55.9 → 41.2 weeks) while remaining causal — a smaller correction than the roughly-half reduction reported under the original single-seed fit (50.5 → 25.6).
+- Causal standardization's effect on duration is **not uniform**: rolling std still shows a large reduction from full-sample (18.9 vs. 55.9 weeks, unchanged by the restart fix — seed 42 was already rolling's best-likelihood seed), but expanding std's best-likelihood fit is nearly as persistent as full-sample (50.4 vs. 55.9 weeks), reversing the earlier reading that expanding std reliably shortens HMM duration.
 
 **Transition entropy** (bits; per-regime Shannon entropy of empirical next-state distribution, full-sample std, states named by mean VIX before computing entropy — integer state IDs are not comparable across models, since GMM's and HMM's index-to-regime mapping differ):
 
 | Regime | GMM | HMM Viterbi | HMM filtered |
 |--------|-----|-------------|--------------|
-| Calm | 0.524 | 0.112 | 0.213 |
-| Transitional | 0.618 | 0.121 | 0.184 |
-| Stressful | 0.643 | 0.237 | 0.412 |
-| **Average** | **0.595** | **0.157** | **0.270** |
+| Calm | 0.524 | 0.100 | 0.155 |
+| Transitional | 0.618 | 0.130 | 0.141 |
+| Stressful | 0.643 | 0.180 | 0.233 |
+| **Average** | **0.595** | **0.136** | **0.177** |
 
 HMM Viterbi paths are the most **sticky** (lowest entropy). Filtered decode increases transition entropy toward GMM-like reactivity while preserving temporal structure.
 
@@ -175,29 +176,29 @@ NBER recessions in sample: **Dot-com** (Mar–Nov 2001), **GFC** (Dec 2007–Jun
 
 | | GMM | HMM (Viterbi) |
 |--|-----|---------------|
-| Recession weeks | 52.2% | 59.7% |
-| Non-recession weeks | 9.3% | 22.2% |
+| Recession weeks | 52.2% | 55.2% |
+| Non-recession weeks | 9.3% | 31.2% |
 
 **Per-recession Stressful share:**
 
 | Episode | GMM | HMM (Viterbi) |
 |---------|-----|---------------|
-| Dot-com | 30.0% | 57.5% |
-| GFC | 65.9% | 58.5% |
+| Dot-com | 30.0% | 52.5% |
+| GFC | 65.9% | 53.7% |
 | COVID | 33.3% | 75.0% |
 
-HMM flags more Stressful weeks outside NBER recessions (22.2% vs 9.3%), consistent with broader, smoother stress classification.
+HMM flags more Stressful weeks outside NBER recessions (31.2% vs 9.3%), consistent with broader, smoother stress classification — the gap widened versus the single-seed HMM (was 22.2%), since the restarted fit's Stressful regime is broader (33.2% share vs. 25.4%).
 
 **VIX > 20 baseline** (Stressful vs all other weeks):
 
 | Metric | GMM | HMM (Viterbi) |
 |--------|-----|---------------|
-| Agreement with VIX>20 | 72.9% | 78.3% |
-| Cohen's κ | 0.350 | 0.513 |
-| Stress recall vs VIX>20 | 31.8% | 54.9% |
-| Stress precision vs VIX>20 | 95.1% | 83.7% |
+| Agreement with VIX>20 | 72.9% | 79.2% |
+| Cohen's κ | 0.350 | 0.551 |
+| Stress recall vs VIX>20 | 31.8% | 66.1% |
+| Stress precision vs VIX>20 | 95.1% | 77.1% |
 
-GMM Stressful labels are **high precision, low recall** relative to VIX>20 (few false alarms). HMM trades precision for recall.
+GMM Stressful labels are **high precision, low recall** relative to VIX>20 (few false alarms). HMM trades precision for recall, more so than under the original single-seed fit (recall rose from 54.9% to 66.1%; precision fell from 83.7% to 77.1%).
 
 ### External validation — Section B: causal filtered decode (Notebook 05)
 
@@ -207,38 +208,38 @@ Refit on full-sample std; compare GMM (already causal), HMM Viterbi, and HMM **f
 
 | Metric | Value |
 |--------|-------|
-| Weeks with any label change | 86 / 1,564 (**5.5%**) |
-| Stress label agreement (Viterbi vs filtered) | **95.1%** |
-| Filtered recall vs Viterbi Stress | 0.945 |
-| Filtered precision vs Viterbi Stress | 0.872 |
+| Weeks with any label change | 51 / 1,564 (**3.3%**) |
+| Stress label agreement (Viterbi vs filtered) | **97.4%** |
+| Filtered recall vs Viterbi Stress | 0.981 |
+| Filtered precision vs Viterbi Stress | 0.944 |
 
-Causal filtering changes labels on only ~5% of weeks; Stressful assignments are highly stable.
+Causal filtering changes labels on only ~3% of weeks (fewer than the 5.5% under the original single-seed fit); Stressful assignments are highly stable.
 
 **NBER overlap with causal filtered decode:**
 
 | | GMM (pointwise) | HMM Viterbi | HMM filtered |
 |--|-----------------|-------------|--------------|
-| Recession weeks (% Stressful) | 52.2% | 59.7% | **61.9%** |
-| Non-recession weeks (% Stressful) | 9.3% | 22.2% | 24.3% |
+| Recession weeks (% Stressful) | 52.2% | 55.2% | **58.2%** |
+| Non-recession weeks (% Stressful) | 9.3% | 31.2% | 32.3% |
 
 **Per-recession Stressful share (causal comparison):**
 
 | Episode | GMM | HMM Viterbi | HMM filtered |
 |---------|-----|-------------|--------------|
-| Dot-com | 30.0% | 57.5% | **60.0%** |
-| GFC | 65.9% | 58.5% | **61.0%** |
+| Dot-com | 30.0% | 52.5% | **55.0%** |
+| GFC | 65.9% | 53.7% | **57.3%** |
 | COVID | 33.3% | 75.0% | **75.0%** |
 
 **VIX > 20 baseline (causal comparison):**
 
 | Metric | GMM | HMM Viterbi | HMM filtered |
 |--------|-----|-------------|--------------|
-| Agreement with VIX>20 | 72.9% | 78.3% | **80.1%** |
-| Cohen's κ | 0.350 | 0.513 | **0.556** |
-| Stress recall vs VIX>20 | 31.8% | 54.9% | **59.8%** |
-| Stress precision vs VIX>20 | 95.1% | 83.7% | **84.2%** |
+| Agreement with VIX>20 | 72.9% | 79.2% | **79.3%** |
+| Cohen's κ | 0.350 | 0.551 | **0.556** |
+| Stress recall vs VIX>20 | 31.8% | 66.1% | **67.9%** |
+| Stress precision vs VIX>20 | 95.1% | 77.1% | **76.3%** |
 
-**Central external-validation finding (Section B):** switching to causal filtered decode does **not** break alignment with NBER recessions or the VIX>20 rule. Overlap is preserved or slightly **improved** versus Viterbi, while persistence is honestly reduced (see duration table above).
+**Central external-validation finding (Section B):** switching to causal filtered decode does **not** break alignment with NBER recessions or the VIX>20 rule. Overlap is preserved or slightly **improved** versus Viterbi, while persistence is honestly reduced (see duration table above). This conclusion is unchanged by the HMM rebase — filtered decode remains a small, stabilizing correction on top of whatever HMM fit it's applied to.
 
 ### External validation — Section C: fully causal variants (Notebook 05)
 
@@ -248,43 +249,45 @@ Section B fixes decode look-ahead but still fits on full-sample z-scores. Sectio
 
 | | Full-sample (B) | Rolling | Expanding |
 |--|-----------------|---------|-----------|
-| Recession weeks (% Stressful) | **61.9%** | **61.2%** | **63.4%** |
-| Non-recession weeks (% Stressful) | 24.3% | 29.2% | 33.4% |
+| Recession weeks (% Stressful) | **58.2%** | **61.2%** | **44.0%** |
+| Non-recession weeks (% Stressful) | 32.3% | 29.2% | 35.4% |
 
-Non-recession Stressful rates creep up as expected when both features and decode are causal; recession overlap stays strong (61–63%).
+Rolling std is unaffected by the HMM rebase (its best-likelihood seed was already 42) and still validates cleanly. **Expanding std no longer does:** its multi-restart HMM optimum has lower recession overlap (44.0%, down from 63.4% under the original single-seed fit) and only a modest edge over its own non-recession rate (35.4%) — a materially weaker signal than full-sample or rolling. This is a real consequence of fitting expanding std properly (best of 10 seeds) rather than accepting whatever `random_state=42` produced; it is not restored by any further change in this pipeline revision.
 
 **Per-recession Stressful share — HMM filtered:**
 
 | Episode | Full-sample | Rolling | Expanding |
 |---------|-------------|---------|-----------|
-| Dot-com | 60.0% | 52.5% | 47.5% |
-| GFC | 61.0% | 59.8% | 69.5% |
+| Dot-com | 55.0% | 52.5% | 20.0% |
+| GFC | 57.3% | 59.8% | 51.2% |
 | COVID | 75.0% | 100.0% | 75.0% |
 
 **VIX > 20 baseline — HMM filtered:**
 
 | Metric | Full-sample | Rolling | Expanding |
 |--------|-------------|---------|-----------|
-| Agreement with VIX>20 | 80.1% | 69.5% | 79.6% |
-| Cohen's κ | 0.556 | 0.342 | 0.569 |
-| Stress recall vs VIX>20 | 59.8% | 51.8% | 69.6% |
-| Stress precision vs VIX>20 | 84.2% | 64.9% | 77.3% |
+| Agreement with VIX>20 | 79.3% | 69.5% | 75.9% |
+| Cohen's κ | 0.556 | 0.342 | 0.489 |
+| Stress recall vs VIX>20 | 67.9% | 51.8% | 65.0% |
+| Stress precision vs VIX>20 | 76.3% | 64.9% | 72.0% |
 
-**Fully causal external-validation finding:** every causal variant validates. Recession Stressful rates stay in the 61–63% band; non-recession rates creep to 29–33% on rolling/expanding std (vs 24% on decode-corrected full-sample); Cohen's κ remains 0.34–0.57. External alignment is not an artifact of look-ahead in decode or features.
+**Fully causal external-validation finding (revised):** rolling std still validates cleanly (recession overlap 61.2%, unchanged) and full-sample filtered decode remains strong (58.2%). Expanding std's external alignment weakened once its HMM fit was corrected to a genuine best-of-10 optimum — recession overlap fell to 44.0%, and Dot-com Stressful share fell to 20%. External validity is **not uniform across causal standardization choices**: it holds for rolling std but is materially weaker for expanding std under the corrected fitting procedure. This replaces the earlier claim that "every causal variant validates," which was an artifact of the expanding-std HMM having been fit at a single arbitrary seed.
 
 ---
 
 ## Key findings (summary)
 
-1. **Persistence is a decode choice, not just a model choice.** HMM Viterbi on full-sample data yields ~50-week regimes; forward-filtered decode yields ~26 weeks; GMM ~9 weeks. Headline HMM–GMM persistence gaps shrink substantially once look-ahead is removed.
+1. **Persistence is a decode choice, not just a model choice — but the effect is smaller than first measured.** HMM Viterbi on full-sample data yields ~56-week regimes; forward-filtered decode yields ~41 weeks; GMM ~9 weeks. Filtered decode still cuts persistence, but by about a quarter rather than the roughly-half reduction reported under the original single-seed HMM fit (a multi-restart fit, see below, found a *stickier* optimum, not a less sticky one).
 
-2. **Models disagree on most weeks.** Cross-model ARI ≈ 0.25–0.27; raw agreement ≈ 29%. Agreement is driven mainly by stress co-occurrence, not by shared Calm/Transitional boundaries.
+2. **Models disagree on most weeks, but less than first measured.** Cross-model ARI ≈ 0.33–0.35 (was 0.25–0.27); raw agreement ≈ 36% (was 29%). Agreement is concentrated in Calm (49% of GMM Calm weeks) and Stressful (41% of GMM Stressful weeks); the largest single pattern is disagreement — 87% of GMM's Transitional weeks are labeled HMM Stressful.
 
-3. **GMM is reactive; HMM is smoother.** GMM flips regimes frequently with high transition entropy. HMM Viterbi produces sticky paths and assigns more Stressful weeks overall.
+3. **GMM is reactive; HMM is smoother.** GMM flips regimes frequently with high transition entropy (avg. 0.595 bits vs. HMM Viterbi's 0.136). HMM Viterbi produces sticky paths and assigns more Stressful weeks overall (33.2% vs. GMM's 13.0%).
 
-4. **External validity holds for every causal variant.** Decode-corrected filtered HMM labels (Section B) preserve NBER and VIX>20 alignment; fully causal rolling/expanding std + filtered (Section C) still show 61–63% recession Stressful rates and κ = 0.34–0.57, with non-recession Stressful rates rising only modestly (29–33%).
+4. **External validity holds for full-sample and rolling std, but not uniformly across causal standardization choices.** Decode-corrected filtered HMM labels (Section B, full-sample std) preserve NBER and VIX>20 alignment. In Section C, rolling std (whose HMM fit is unaffected by the multi-restart correction) still validates cleanly (61.2% recession Stressful rate), but expanding std's corrected HMM fit has materially weaker external alignment (44.0% recession Stressful rate, down from 63.4% under the original single-seed fit). "Every causal variant validates" does not survive fitting the HMM properly.
 
-5. **Standardization matters for magnitudes.** Rolling and expanding z-scores shorten regime durations further and are the right variants for strictly causal feature construction; full-sample std remains the committed baseline for reproduction.
+5. **Standardization's effect on persistence is not uniform once the HMM fit is corrected.** Rolling std still shortens HMM duration sharply relative to full-sample (18.9 vs. 55.9 weeks); expanding std's best-likelihood fit is nearly as persistent as full-sample (50.4 vs. 55.9 weeks). Full-sample std remains the committed baseline for reproduction.
+
+6. **A single-seed HMM fit is not a stable baseline.** The committed HMM labels originally came from one EM run at `random_state=42`. A seed-stability sweep (42–61) found fits up to 86 nats higher in log-likelihood with materially different label assignments (ARI as low as 0.16 against the seed-42 labels). `fit_hmm` now restarts across 10 fixed seeds and keeps the best log-likelihood — still fully deterministic, but no longer at the mercy of one arbitrary seed. This one change moved most of the numbers in this README; see [`notebooks/03_models.ipynb`](notebooks/03_models.ipynb) for the diagnostic.
 
 ---
 
@@ -295,6 +298,7 @@ Non-recession Stressful rates creep up as expected when both features and decode
 - **Three fixed components** and hand-crafted feature set; no model selection over \(K\) or alternative macro variables.
 - **NBER and VIX checks are descriptive**, not formal hypothesis tests. VIX>20 is a simple rule-of-thumb baseline, not an oracle.
 - **Not out-of-sample validation** of regime stability or economic utility.
+- **Expanding-std HMM external validity is weak.** Once fit with a proper multi-restart (Section C), the expanding-std HMM's recession overlap (44.0%) is well below full-sample (58.2%) and rolling (61.2%). Rolling std is the more reliable fully-causal variant in this sample; expanding std's apparent validity in earlier analysis depended on an arbitrary single-seed HMM fit.
 
 ---
 
@@ -326,6 +330,7 @@ Run notebooks **01 → 05** in order from the `notebooks/` directory. All I/O go
 **Reproduction requirements:**
 
 - GMM must use `init_params="k-means++"` (enforced in `fit_gmm`).
+- HMM must use the 10-seed restart in `fit_hmm` (seeds 42–51, highest log-likelihood kept) — a single-seed fit will not reproduce the committed labels.
 - Load `market_features_weekly_std.csv` for the full-sample baseline — do not recompute.
 - Notebook 03 checks **ARI ≥ 0.99** against committed `gmm_regimes.csv` and `hmm_regimes.csv` before overwriting them.
 

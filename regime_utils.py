@@ -114,13 +114,23 @@ def fit_gmm(X: np.ndarray) -> GaussianMixture:
     ).fit(X)
 
 
-def fit_hmm(X: np.ndarray) -> GaussianHMM:
-    return GaussianHMM(
-        n_components=N_COMPONENTS,
-        covariance_type="full",
-        n_iter=1000,
-        random_state=RANDOM_STATE,
-    ).fit(X)
+def fit_hmm(X: np.ndarray, seeds: tuple[int, ...] = tuple(range(RANDOM_STATE, RANDOM_STATE + 10))) -> GaussianHMM:
+    """Multi-restart EM: fit at each seed, keep the highest-likelihood result.
+
+    Deterministic because the seed tuple is fixed, so the reproduction gate
+    still means something. Single-seed EM (the old behavior) can land on a
+    mediocre local optimum — see the seed diagnostic in 03_models.ipynb.
+    """
+    fits = [
+        GaussianHMM(
+            n_components=N_COMPONENTS,
+            covariance_type="full",
+            n_iter=1000,
+            random_state=s,
+        ).fit(X)
+        for s in seeds
+    ]
+    return max(fits, key=lambda m: m.score(X))
 
 
 def viterbi_decode(hmm: GaussianHMM, X: np.ndarray) -> np.ndarray:
