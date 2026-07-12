@@ -45,8 +45,10 @@ Daily series in [`data/`](data/): `sp500.csv`, `vix.csv`, `t10y2y.csv`.
 | Variant | File | Rows | Causal? | Notes |
 |---------|------|------|---------|-------|
 | Full-sample | `market_features_weekly_std.csv` | 1,564 | No | Committed baseline; sklearn population std (ddof=0). **Do not recompute in notebooks.** |
-| Rolling 52-week | `market_features_weekly_std_rolling.csv` | 1,513 | Yes | `(x − roll_mean_52) / roll_std_52`; first 51 weeks dropped |
-| Expanding | `market_features_weekly_std_expanding.csv` | 1,513 | Yes | Expanding mean/std with `min_periods=52` |
+| Rolling 52-week | `market_features_weekly_std_rolling.csv` | 1,513 | Yes | `(x − roll_mean_52) / roll_std_52`, `ddof=0`; first 51 weeks dropped |
+| Expanding | `market_features_weekly_std_expanding.csv` | 1,513 | Yes | Expanding mean/std with `min_periods=52`, `ddof=0` |
+
+All three variants use the same population-std estimator (`ddof=0`) — rolling and expanding used to default to pandas' `ddof=1`, a ~1% difference in z-space that's now unified with the committed full-sample baseline.
 
 Full-sample standardized features (committed):
 

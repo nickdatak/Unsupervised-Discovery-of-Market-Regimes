@@ -86,20 +86,20 @@ def load_expanding_std() -> pd.DataFrame:
 def rolling_zscore(
     features: pd.DataFrame, window: int = 52, min_periods: int = 52
 ) -> pd.DataFrame:
-    """Causal z-score using a rolling window (pandas std, ddof=1)."""
+    """Causal z-score using a rolling window (ddof=0, matches sklearn baseline)."""
     out = pd.DataFrame(index=features.index, columns=features.columns, dtype=float)
     for col in features.columns:
         roll = features[col].rolling(window=window, min_periods=min_periods)
-        out[col] = (features[col] - roll.mean()) / roll.std()
+        out[col] = (features[col] - roll.mean()) / roll.std(ddof=0)
     return out.dropna()
 
 
 def expanding_zscore(features: pd.DataFrame, min_periods: int = 52) -> pd.DataFrame:
-    """Causal z-score using expanding mean/std (pandas std, ddof=1)."""
+    """Causal z-score using expanding mean/std (ddof=0, matches sklearn baseline)."""
     out = pd.DataFrame(index=features.index, columns=features.columns, dtype=float)
     for col in features.columns:
         mean = features[col].expanding(min_periods=min_periods).mean()
-        std = features[col].expanding(min_periods=min_periods).std()
+        std = features[col].expanding(min_periods=min_periods).std(ddof=0)
         out[col] = (features[col] - mean) / std
     return out.dropna()
 
